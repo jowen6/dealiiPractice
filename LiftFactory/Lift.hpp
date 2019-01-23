@@ -13,6 +13,7 @@
 #include <deal.II/base/point.h>
 #include <deal.II/base/function.h>
 #include <vector>
+#include <memory>
 using namespace dealii;
 
 enum LiftType{
@@ -33,7 +34,7 @@ public:
     virtual void vector_gradient(const Point<spacedim> &p,
                                  std::vector<Tensor<1,spacedim,double> > &gradients) const = 0;
     virtual void print_Lift() = 0;
-    static Lift* Create(LiftType type);
+    static std::unique_ptr<Lift<spacedim> > Create(LiftType type);
 };
 
 
@@ -91,9 +92,10 @@ void RadialLift<spacedim>::print_Lift(){
 
 //Lift Factory
 template <int spacedim>
-Lift<spacedim>* Lift<spacedim>::Create(LiftType type){
+std::unique_ptr<Lift<spacedim> > Lift<spacedim>::Create(LiftType type){
     if (type == LT_RadialLift)
-        return new RadialLift<spacedim>();
+        return std::make_unique<RadialLift<spacedim> >(); //creates unique ptr which will auto delete once out of scope
+        //return new RadialLift<spacedim>();
     else return NULL;
 }
 

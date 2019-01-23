@@ -16,7 +16,8 @@ using namespace dealii;
 int main(){
     
     LiftType type = LT_RadialLift;
-    Lift<3>* pLift = Lift<3>::Create(type);
+    //std::unique_ptr<Lift<3> > pLift = Lift<3>::Create(type);
+    auto pLift = Lift<3>::Create(type);
     pLift->print_Lift();
     Vector<double> V(3);
     Point<3> P(0.5,0.1,0);
