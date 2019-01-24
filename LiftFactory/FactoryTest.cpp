@@ -20,7 +20,7 @@ int main(){
     auto pLift = Lift<3>::Create(type);
     pLift->print_Lift();
     Vector<double> V(3);
-    Point<3> P(0.5,0.1,0);
+    Point<3> P(1,0,0);
     pLift->vector_value(P, V);
     
     std::cout<< V(0) << "\n";

@@ -50,13 +50,13 @@ class RadialLift : public Lift<spacedim>{
     void print_Lift();
 };
 
-//Define RadialLift function
+//Define RadialLift vector pointing from point to exact surface
 template <int spacedim>
 void RadialLift<spacedim>::vector_value(const Point<spacedim> &p, Vector<double> &values) const{
     double length = p.norm();
     
     for (unsigned int i=0; i<spacedim; ++i){
-        values(i) = p(i)/(length-p(i));
+        values(i) = (p(i)/length)-p(i);
     }
 }
 
