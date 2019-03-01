@@ -21,7 +21,7 @@ class Lift :  public Function<spacedim>
 {
 public:
     Lift () : Function<spacedim>(spacedim) {};
-    
+    virtual ~Lift() {};
     virtual void vector_value (const Point<spacedim> &p, Vector<double>   &values) const = 0;
     
     virtual void vector_gradient(const Point<spacedim> &p, std::vector<Tensor<1,spacedim,double> > &gradients) const = 0;

@@ -39,6 +39,7 @@
 
 #include "Lifts.h" //for lift definitions
 #include "Shapes.h" //for Shape definitions
+#include <memory>
 
 using namespace dealii;
 
@@ -59,7 +60,7 @@ double coefficient(const Point<dim> &p)
 template <int dim>
 double coefficient(const Point<dim> &p)
 {
-    return 1 + 0.*p(0);
+    return 1 + 0.*p(0); //To prevent warning about unused p;
 }
 
 //Half-Sphere x-axis is height
@@ -185,7 +186,17 @@ template <int dim>
 class SFEMAdapt
 {
 public:
-    SFEMAdapt(const unsigned degree = 1, const unsigned mapping_degree = 1);
+    //SFEMAdapt(Shape<dim> *shape_ptr, const unsigned degree = 1, const unsigned mapping_degree = 1);
+    //SFEMAdapt(std::unique_ptr<Shape<dim> > shape_ptr, const unsigned degree = 1, const unsigned mapping_degree = 1);
+    
+     SFEMAdapt(std::unique_ptr<Shape<dim> > shape_ptr, const unsigned degree, const unsigned mapping_degree)
+     : fe(degree)
+     , fe_mapping(FE_Q<dim-1, dim>(mapping_degree), dim)
+     , dof_handler(triangulation)
+     , dof_handler_mapping(triangulation)
+     , mapping_degree(mapping_degree)
+     , shape(std::move(shape_ptr))
+     {lift = shape->GetLift(); }
     
     void run_uniform_refinement();
     void run_adaptive_refinement();
@@ -221,8 +232,11 @@ private:
     const unsigned int               mapping_degree;
     
     //Need to figure out how to properly set up Shape details
-    Sphere<dim>                      shape;
-    Lift<dim>& lift = shape.lift;
+    //std::unique_ptr<Shape<dim> >                      shape;
+    //Shape<dim>                      *shape;
+    std::unique_ptr<Shape<dim> >     shape;
+    Lift<dim> *lift;
+    //Lift<dim>
     //RadialLift<dim>                  lift;
     //void& AssignPolyhedron = sphere.AssignPolyhedron;
     //Shape<dim>        shape;
@@ -230,16 +244,19 @@ private:
     //void& AssignPolyhedron = shape.AssignPolyhedron;
 };
 
-
+/*
 template <int dim>
-SFEMAdapt<dim>::SFEMAdapt(const unsigned degree, const unsigned mapping_degree)
+SFEMAdapt(std::unique_ptr<Shape<dim> > shape_ptr, const unsigned degree, const unsigned mapping_degree)
     : fe(degree)
     , fe_mapping(FE_Q<dim-1, dim>(mapping_degree), dim)
     , dof_handler(triangulation)
     , dof_handler_mapping(triangulation)
     , mapping_degree(mapping_degree)
+    //, shape(std::move(shape_ptr))
     {}
-
+*/
+//SFEMAdapt<dim>::SFEMAdapt(Shape<dim> *shape_ptr, const unsigned degree, const unsigned mapping_degree)
+//SFEMAdapt(std::unique_ptr<Shape<dim>> shape_ptr, const unsigned degree, const unsigned mapping_degree)
 
 template <int dim>
 void SFEMAdapt<dim>::setup_system()
@@ -250,7 +267,7 @@ void SFEMAdapt<dim>::setup_system()
     mapping_constraints.clear();
     DoFTools::make_hanging_node_constraints (dof_handler_mapping, mapping_constraints);
     mapping_constraints.close();
-    VectorTools::interpolate(dof_handler_mapping, lift, approximate_lift);
+    VectorTools::interpolate(dof_handler_mapping, *lift, approximate_lift);
     mapping_constraints.distribute(approximate_lift);
     
     //Since mapping is within the scope of this method, we have to call it everywhere throughout the code. I'd rather have it as a variable of the class.
@@ -308,7 +325,7 @@ void SFEMAdapt<dim>::assemble_system()
     std::vector<double>                     rhs_values(n_q_points);
     const RightHandSide<dim>                rhs;
     
-    //typename DoFHandler<dim-1, dim>::active_cell_iterator cell = dof_handler.begin_active(), endc = dof_handler.end();
+
     auto cell = dof_handler.begin_active();
     auto endc = dof_handler.end();
     
@@ -487,7 +504,7 @@ void SFEMAdapt<dim>::GEOMETRY_estimate(double &estimated_geometric_error)
     
     VectorTools::integrate_difference(dof_handler_mapping,
                                       approximate_lift,
-                                      lift,
+                                      *lift,
                                       estimated_geometric_error_per_cell,
                                       QGauss<2>(mapping_degree + 1),
                                       VectorTools::Linfty_norm);
@@ -592,7 +609,7 @@ void SFEMAdapt<dim>::output_results(const unsigned int cycle) const
 template <int dim>
 void SFEMAdapt<dim>::run_uniform_refinement()
 {
-    shape.AssignPolyhedron(triangulation);  //Attach Polyhedron
+    shape->AssignPolyhedron(triangulation);  //Attach Polyhedron
     
     for (unsigned int cycle = 0; cycle < 4; ++cycle)
     {
@@ -618,7 +635,7 @@ void SFEMAdapt<dim>::run_uniform_refinement()
 template <int dim>
 void SFEMAdapt<dim>::run_adaptive_refinement()
 {
-    shape.AssignPolyhedron(triangulation);  //Attach Polyhedron
+    shape->AssignPolyhedron(triangulation);  //Attach Polyhedron
     
     //std::cout << "ADAPT_SURFACE" << "\n";
     //GEOMETRY_estimate_mark_refine(0.00001);
@@ -630,11 +647,46 @@ void SFEMAdapt<dim>::run_adaptive_refinement()
 }
 
 
+
+template <int dim>
+class SFEMTest
+{
+public:
+    SFEMTest(std::unique_ptr<Shape<dim>> shape_ptr, int a, int b): shape(std::move(shape_ptr)), a(a), b(b)
+    {std::cout << "success" << std::endl; shape->GetLift()->print_Lift(); }
+
+private:
+    std::unique_ptr<Shape<dim>>     shape;
+    int a;
+    int b;
+};
+
+
+
+//template <int dim>
+//SFEMTest(std::unique_ptr<Shape<3>> shape_ptr)
+//: shape(shape_ptr)
+//{std::cout << "success" << std::endl; }
+
+
 int main()
 {
     try
     {
-        SFEMAdapt<3> laplace_problem_surface(1,1);
+        
+        //auto shape_ptr = std::make_unique<Sphere<3> >();
+        //std::unique_ptr<Sphere<3>> shape_ptr(new Sphere);
+        
+        
+        auto shape_ptr = std::unique_ptr<Sphere<3>>(new Sphere<3>);
+        //SFEMTest<3> Test(std::move(shape_ptr), 1, 1);
+        
+        SFEMAdapt<3> laplace_problem_surface(std::move(shape_ptr), 1, 1);
+        
+        
+        //Sphere<3> shape;
+        //Sphere<3> *shape_ptr = &shape;
+        //SFEMAdapt<3> laplace_problem_surface(shape_ptr, 1, 1);
         laplace_problem_surface.run_uniform_refinement();
         
         //SFEMAdapt<3> laplace_problem_surface_adapt(1,1);

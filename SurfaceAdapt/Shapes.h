@@ -19,20 +19,24 @@ class Shape
 {
 public:
     Shape (){};
-    
-    virtual void AssignPolyhedron (Triangulation<spacedim-1, spacedim> &triangulation) = 0;
-    
+    virtual ~Shape() {};
+    virtual void AssignPolyhedron(Triangulation<spacedim-1, spacedim> &triangulation) = 0;
+    virtual Lift<spacedim> *GetLift() = 0;
 };
 
 
-//RadialLift
+//RadialLift Sphere
 template <int spacedim>
 class Sphere : public Shape<spacedim>
 {
 public:
+    Sphere() : lift(new RadialLift<spacedim>){}
     void AssignPolyhedron (Triangulation<spacedim-1, spacedim> &triangulation) override;
+    RadialLift<spacedim> *GetLift() override{
+        return lift;
+    }
+    RadialLift<spacedim> *lift;
     
-    RadialLift<spacedim> lift;
 };
 
 
