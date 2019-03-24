@@ -26,8 +26,9 @@ template <int spacedim>
 class Surface{
 public:
     
-    Lift<spacedim>* SurfaceLift;
-    virtual void Attach_Surface_To_Triangulation() = 0;
+    Surface();
+    std::unique_ptr<Lift<spacedim> > SurfaceLift;
+    virtual void Attach_Surface_To_Triangulation(Triangulation<spacedim - 1, spacedim> &tria) = 0;
     virtual void print_Surface() = 0;
     
     static Surface* Create(SurfaceType type);
@@ -37,14 +38,34 @@ public:
 //Spherical surface
 template <int spacedim>
 class Sphere : public Surface<spacedim>{
-    void Attach_Surface_To_Triangulation();
+    void Attach_Surface_To_Triangulation(Triangulation<spacedim - 1, spacedim> &tria);
     
     void print_Lift();
 };
 
 
 template <int spacedim>
-void Sphere::Attach_Surface_To_Triangulation();
+void Sphere::Attach_Surface_To_Triangulation(Triangulation<spacedim - 1, spacedim> &tria){
+    
+    static SphericalManifold<spacedim - 1,spacedim> surface_description;
+    GridGenerator::hyper_sphere(tria);
+    tria.set_all_manifold_ids(0);
+    tria.set_manifold (0, surface_description);
+    
+    tria.refine_global(2);
+}
+
+
+template <int spacedim>
+void Sphere::Attach_Surface_To_Triangulation(Triangulation<spacedim - 1, spacedim> &tria){
+    
+    static SphericalManifold<spacedim - 1,spacedim> surface_description;
+    GridGenerator::hyper_sphere(tria);
+    tria.set_all_manifold_ids(0);
+    tria.set_manifold (0, surface_description);
+    
+    tria.refine_global(2);
+}
 
 
 //Surface Factory

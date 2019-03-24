@@ -16,6 +16,9 @@
 #include <memory>
 using namespace dealii;
 
+/*
+What if we take the piecewise lift thing to an extreme? We work backwards. We build a polyhedron, then we attach a lift to each face. Simplest case would be same lift on each face. The lift is just a graph on that face. Even simpler, make each lift 0 on boundary of face to insure continuity.
+*/
 
 enum LiftType{
     LT_RadialLift, LT_C2AlphaLift
@@ -64,10 +67,25 @@ void RadialLift<spacedim>::vector_value(const Point<spacedim> &p, Vector<double>
 }
 
 
-//Define RadialLift gradient
-template <int spacedim>
-void RadialLift<spacedim>::vector_gradient(const Point<spacedim> &p,
-                                           std::vector<Tensor<1, spacedim, double> > &gradients) const{
+//Define RadialLift gradient for 2D
+template <2>
+void RadialLift<2>::vector_gradient(const Point<2> &p,
+                                           std::vector<Tensor<1, 2, double> > &gradients) const{
+    double length = p.norm();
+    //first component
+    gradients[0][0] = -1./length/length/length * p(0)*p(0) + (1./length-1.0);
+    gradients[0][1] = -1./length/length/length * p(1)*p(0);
+
+    
+    //second component
+    gradients[1][0] = -1./length/length/length * p(0)*p(1);
+    gradients[1][1] = -1./length/length/length * p(1)*p(1) + (1./length-1.0);
+}
+
+//Define RadialLift gradient for 3D
+template <3>
+void RadialLift<3>::vector_gradient(const Point<3> &p,
+                                           std::vector<Tensor<1, 3, double> > &gradients) const{
     double length = p.norm();
     //first component
     gradients[0][0] = -1./length/length/length * p(0)*p(0) + (1./length-1.0);
@@ -85,7 +103,6 @@ void RadialLift<spacedim>::vector_gradient(const Point<spacedim> &p,
     gradients[2][1] = -1./length/length/length * p(1)*p(2);
     gradients[2][2] = -1./length/length/length * p(2)*p(2) + (1./length-1.0);
 }
-
 
 //Print RadialLift details
 template <int spacedim>

@@ -46,59 +46,31 @@
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#include <deal.II/fe/mapping_q.h> //for MappingQ
+#include <deal.II/grid/manifold_lib.h> //SphericalManifold
+#include <deal.II/base/function.h> //for Function class
+
+
 #include <fstream>
 
-// From the following include file we will import the declaration of
-// H1-conforming finite element shape functions. This family of finite
-// elements is called <code>FE_Q</code>, and was used in all examples before
-// already to define the usual bi- or tri-linear elements, but we will now use
-// it for bi-quadratic elements:
 #include <deal.II/fe/fe_q.h>
-// We will not read the grid from a file as in the previous example, but
-// generate it using a function of the library. However, we will want to write
-// out the locally refined grids (just the grid, not the solution) in each
-// step, so we need the following include file instead of
-// <code>grid_in.h</code>:
+
 #include <deal.II/grid/grid_out.h>
 
-
-// When using locally refined grids, we will get so-called <code>hanging
-// nodes</code>. However, the standard finite element methods assumes that the
-// discrete solution spaces be continuous, so we need to make sure that the
-// degrees of freedom on hanging nodes conform to some constraints such that
-// the global solution is continuous. We are also going to store the boundary
-// conditions in this object. The following file contains a class which is
-// used to handle these constraints:
 #include <deal.II/lac/affine_constraints.h>
 
-// In order to refine our grids locally, we need a function from the library
-// that decides which cells to flag for refinement or coarsening based on the
-// error indicators we have computed. This function is defined here:
 #include <deal.II/grid/grid_refinement.h>
 
-// Finally, we need a simple way to actually compute the refinement indicators
-// based on some error estimate. While in general, adaptivity is very
-// problem-specific, the error indicator in the following file often yields
-// quite nicely adapted grids for a wide class of problems.
 #include <deal.II/numerics/error_estimator.h>
 
 // Finally, this is as in previous programs:
 using namespace dealii;
 
-
-// @sect3{The <code>Step6</code> class template}
-
-// The main class is again almost unchanged. Two additions, however, are made:
-// we have added the <code>refine_grid</code> function, which is used to
-// adaptively refine the grid (instead of the global refinement in the
-// previous examples), and a variable which will hold the constraints. In
-// addition, we have added a destructor to the class for reasons that will
-// become clear when we discuss its implementation.
 template <int dim>
 class Step6
 {
 public:
-  Step6();
+  Step6(const unsigned degree = 1);
 
   void run();
 
@@ -107,13 +79,15 @@ private:
   void assemble_system();
   void solve();
   void refine_grid();
-  void output_results(const unsigned int cycle) const;
-
-  Triangulation<dim> triangulation;
-
-  FE_Q<dim>       fe;
-  DoFHandler<dim> dof_handler;
-
+  //void output_results(const unsigned int cycle) const;
+  void output_results() const;
+  //Triangulation<dim>        triangulation;
+  //FE_Q<dim>                 fe;
+  //DoFHandler<dim>           dof_handler;
+  Triangulation<dim-1, dim>        triangulation;
+  FE_Q<dim-1, dim>                 fe;
+  DoFHandler<dim-1, dim>           dof_handler;
+  MappingQ<2, 3>      mapping;
 
   // This is the new variable in the main class. We need an object which holds
   // a list of constraints to hold the hanging nodes and the boundary
@@ -132,6 +106,7 @@ private:
 
 // The implementation of nonconstant coefficients is copied verbatim from
 // step-5:
+/*
 template <int dim>
 double coefficient(const Point<dim> &p)
 {
@@ -142,43 +117,137 @@ double coefficient(const Point<dim> &p)
   else
     return 15;
 }
-
-
-
-// @sect3{The <code>Step6</code> class implementation}
-
-// @sect4{Step6::Step6}
-
-// The constructor of this class is mostly the same as before, but this time
-// we want to use the quadratic element. To do so, we only have to replace the
-// constructor argument (which was <code>1</code> in all previous examples) by
-// the desired polynomial degree (here <code>2</code>):
+*/
+//Half-Sphere x-axis is height
+/*
 template <int dim>
-Step6<dim>::Step6()
+double coefficient(const Point<dim> &p)
+{
+    if (p(2)*p(2) + p(1)*p(1) < 0.4 * 0.4)
+        return 5;
+    else if (p(2)*p(2) + p(1)*p(1) > 0.8 * 0.8)
+        return 10;
+    else
+        return 15;
+}
+*/
+
+//Half-Sphere x-axis is height
+template <int dim>
+double coefficient(const Point<dim> &p)
+{
+    if (p(0) < 0.4)
+        return 5;
+    //else if (p(2)*p(2) + p(0)*p(0) > 0.8 * 0.8)
+    //    return 10;
+    else
+        return 15;
+}
+
+template <int dim>
+class Solution : public Function<dim>
+{
+public:
+    Solution()
+    : Function<dim>()
+    {}
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+    virtual Tensor<1, dim>
+    gradient(const Point<dim> & p,
+             const unsigned int component = 0) const override;
+};
+template <>
+double Solution<2>::value(const Point<2> &p, const unsigned int) const
+{
+    return (-2. * p(0) * p(1));
+}
+template <>
+Tensor<1, 2> Solution<2>::gradient(const Point<2> &p,
+                                   const unsigned int) const
+{
+    Tensor<1, 2> return_value;
+    return_value[0] = -2. * p(1) * (1 - 2. * p(0) * p(0));
+    return_value[1] = -2. * p(0) * (1 - 2. * p(1) * p(1));
+    return return_value;
+}
+template <>
+double Solution<3>::value(const Point<3> &p, const unsigned int) const
+{
+    return (std::sin(numbers::PI * p(0)) * std::cos(numbers::PI * p(1)) *
+            exp(p(2)));
+}
+template <>
+Tensor<1, 3> Solution<3>::gradient(const Point<3> &p,
+                                   const unsigned int) const
+{
+    using numbers::PI;
+    Tensor<1, 3> return_value;
+    return_value[0] = PI * cos(PI * p(0)) * cos(PI * p(1)) * exp(p(2));
+    return_value[1] = -PI * sin(PI * p(0)) * sin(PI * p(1)) * exp(p(2));
+    return_value[2] = sin(PI * p(0)) * cos(PI * p(1)) * exp(p(2));
+    return return_value;
+}
+
+
+template <int dim>
+class RightHandSide : public Function<dim>
+{
+public:
+    RightHandSide()
+    : Function<dim>()
+    {}
+    virtual double value(const Point<dim> & p,
+                         const unsigned int component = 0) const override;
+};
+
+template <>
+double RightHandSide<2>::value(const Point<2> &p, const unsigned int /*component*/) const
+{
+    return (-8. * p(0) * p(1));
+}
+
+//Sphere
+//template <>
+//double RightHandSide<3>::value(const Point<3> &p, const unsigned int /*component*/) const
+/*
+{
+    using numbers::PI;
+    Tensor<2, 3> hessian;
+    hessian[0][0] = -PI * PI * sin(PI * p(0)) * cos(PI * p(1)) * exp(p(2));
+    hessian[1][1] = -PI * PI * sin(PI * p(0)) * cos(PI * p(1)) * exp(p(2));
+    hessian[2][2] = sin(PI * p(0)) * cos(PI * p(1)) * exp(p(2));
+    hessian[0][1] = -PI * PI * cos(PI * p(0)) * sin(PI * p(1)) * exp(p(2));
+    hessian[1][0] = -PI * PI * cos(PI * p(0)) * sin(PI * p(1)) * exp(p(2));
+    hessian[0][2] = PI * cos(PI * p(0)) * cos(PI * p(1)) * exp(p(2));
+    hessian[2][0] = PI * cos(PI * p(0)) * cos(PI * p(1)) * exp(p(2));
+    hessian[1][2] = -PI * sin(PI * p(0)) * sin(PI * p(1)) * exp(p(2));
+    hessian[2][1] = -PI * sin(PI * p(0)) * sin(PI * p(1)) * exp(p(2));
+    Tensor<1, 3> gradient;
+    gradient[0] = PI * cos(PI * p(0)) * cos(PI * p(1)) * exp(p(2));
+    gradient[1] = -PI * sin(PI * p(0)) * sin(PI * p(1)) * exp(p(2));
+    gradient[2] = sin(PI * p(0)) * cos(PI * p(1)) * exp(p(2));
+    Point<3> normal = p;
+    normal /= p.norm();
+    return (-trace(hessian) + 2 * (gradient * normal) +
+            (hessian * normal) * normal);
+}
+*/
+//Torus y is axis of symmetry
+template <>
+double RightHandSide<3>::value(const Point<3> &p, const unsigned int /*component*/) const
+{
+    return p(2);
+}
+
+template <int dim>
+Step6<dim>::Step6(const unsigned degree)
   : fe(2)
   , dof_handler(triangulation)
+  , mapping(degree)
 {}
 
 
-
-// @sect4{Step6::setup_system}
-
-// The next function sets up all the variables that describe the linear
-// finite element problem, such as the DoFHandler, matrices, and
-// vectors. The difference to what we did in step-5 is only that we now also
-// have to take care of hanging node constraints. These constraints are
-// handled almost exclusively by the library, i.e. you only need to know
-// that they exist and how to get them, but you do not have to know how they
-// are formed or what exactly is done with them.
-//
-// At the beginning of the function, you find all the things that are the same
-// as in step-5: setting up the degrees of freedom (this time we have
-// quadratic elements, but there is no difference from a user code perspective
-// to the linear -- or any other degree, for that matter -- case), generating
-// the sparsity pattern, and initializing the solution and right hand side
-// vectors. Note that the sparsity pattern will have significantly more
-// entries per row now, since there are now 9 degrees of freedom per cell
-// (rather than only four), that can couple with each other.
 template <int dim>
 void Step6<dim>::setup_system()
 {
@@ -214,84 +283,52 @@ void Step6<dim>::setup_system()
   // constraints may be added any more:
   constraints.close();
 
-  // Now we first build our compressed sparsity pattern like we did in the
-  // previous examples. Nevertheless, we do not copy it to the final sparsity
-  // pattern immediately.  Note that we call a variant of
-  // make_sparsity_pattern that takes the AffineConstraints object as the third
-  // argument. We are letting the routine know that we will never write into
-  // the locations given by <code>constraints</code> by setting the argument
-  // <code>keep_constrained_dofs</code> to false (in other words, that we will
-  // never write into entries of the matrix that correspond to constrained
-  // degrees of freedom). If we were to condense the
-  // constraints after assembling, we would have to pass <code>true</code>
-  // instead because then we would first write into these locations only to
-  // later set them to zero again during condensation.
   DynamicSparsityPattern dsp(dof_handler.n_dofs());
   DoFTools::make_sparsity_pattern(dof_handler,
                                   dsp,
                                   constraints,
                                   /*keep_constrained_dofs = */ false);
 
-  // Now all non-zero entries of the matrix are known (i.e. those from
-  // regularly assembling the matrix and those that were introduced by
-  // eliminating constraints). We may copy our intermediate object to the
-  // sparsity pattern:
   sparsity_pattern.copy_from(dsp);
 
   // We may now, finally, initialize the sparse matrix:
   system_matrix.reinit(sparsity_pattern);
 }
 
-
-// @sect4{Step6::assemble_system}
-
-// Next, we have to assemble the matrix again. There are two code changes
-// compared to step-5:
-//
-// First, we have to use a higher-order quadrature formula to account for the
-// higher polynomial degree in the finite element shape functions. This is
-// easy to change: the constructor of the <code>QGauss</code> class takes the
-// number of quadrature points in each space direction. Previously, we had two
-// points for bilinear elements. Now we should use three points for
-// biquadratic elements.
-//
-// Second, to copy the local matrix and vector on each cell into the global
-// system, we are no longer using a hand-written loop. Instead, we use
-// AffineConstraints::distribute_local_to_global() that internally executes
-// this loop while performing Gaussian elimination on rows and columns
-// corresponding to constrained degrees on freedom.
-//
-// The rest of the code that forms the local contributions remains
-// unchanged. It is worth noting, however, that under the hood several things
-// are different than before. First, the variables <code>dofs_per_cell</code>
-// and <code>n_q_points</code> now are 9 each, where they were 4
-// before. Introducing such variables as abbreviations is a good strategy to
-// make code work with different elements without having to change too much
-// code. Secondly, the <code>fe_values</code> object of course needs to do
-// other things as well, since the shape functions are now quadratic, rather
-// than linear, in each coordinate variable. Again, however, this is something
-// that is completely handled by the library.
 template <int dim>
 void Step6<dim>::assemble_system()
 {
-  const QGauss<dim> quadrature_formula(3);
-
+  //const QGauss<dim> quadrature_formula(3);
+  const QGauss<dim-1> quadrature_formula(3);
+/*
   FEValues<dim> fe_values(fe,
                           quadrature_formula,
                           update_values |
                           update_gradients |
                           update_quadrature_points |
                           update_JxW_values);
-
+*/
+    FEValues<2,3> fe_values(mapping,
+                            fe,
+                            quadrature_formula,
+                            update_values |
+                            update_gradients |
+                            update_quadrature_points |
+                            update_JxW_values);
+    
   const unsigned int dofs_per_cell = fe.dofs_per_cell;
   const unsigned int n_q_points    = quadrature_formula.size();
 
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double>     cell_rhs(dofs_per_cell);
+    
+  std::vector<double>    rhs_values(n_q_points);
+  const RightHandSide<dim> rhs;
+    
 
   std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-  typename DoFHandler<dim>::active_cell_iterator cell =
+  typename DoFHandler<dim-1, dim>::active_cell_iterator cell =
                                                    dof_handler.begin_active(),
                                                  endc = dof_handler.end();
   for (; cell != endc; ++cell)
@@ -300,11 +337,11 @@ void Step6<dim>::assemble_system()
       cell_rhs    = 0;
 
       fe_values.reinit(cell);
-
+      rhs.value_list(fe_values.get_quadrature_points(), rhs_values);
+        
       for (unsigned int q_index = 0; q_index < n_q_points; ++q_index)
         {
-          const double current_coefficient =
-            coefficient<dim>(fe_values.quadrature_point(q_index));
+            const double current_coefficient = coefficient<dim>(fe_values.quadrature_point(q_index));
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
@@ -312,44 +349,19 @@ void Step6<dim>::assemble_system()
                   (current_coefficient * fe_values.shape_grad(i, q_index) *
                    fe_values.shape_grad(j, q_index) * fe_values.JxW(q_index));
 
-              cell_rhs(i) += (fe_values.shape_value(i, q_index) * 1.0 *
-                              fe_values.JxW(q_index));
+              //cell_rhs(i) += (fe_values.shape_value(i, q_index) * 1.0 *fe_values.JxW(q_index));
+                cell_rhs(i) += (fe_values.shape_value(i, q_index) * rhs_values[q_index] *
+                                fe_values.JxW(q_index));
             }
         }
 
       // Finally, transfer the contributions from @p cell_matrix and
       // @p cell_rhs into the global objects.
       cell->get_dof_indices(local_dof_indices);
-      constraints.distribute_local_to_global(
-        cell_matrix, cell_rhs, local_dof_indices, system_matrix, system_rhs);
+      constraints.distribute_local_to_global(cell_matrix, cell_rhs, local_dof_indices, system_matrix, system_rhs);
     }
-  // Now we are done assembling the linear system. The constraint matrix took
-  // care of applying the boundary conditions and also eliminated hanging node
-  // constraints. The constrained nodes are still in the linear system (there
-  // is a nonzero entry, chosen in a way that the matrix is well conditioned,
-  // on the diagonal of the matrix and all other entries for this line are set
-  // to zero) but the computed values are invalid (i.e., the correspond entry
-  // in <code>system_rhs</code> is currently meaningless). We compute the
-  // correct values for these nodes at the end of the <code>solve</code>
-  // function.
 }
 
-
-// @sect4{Step6::solve}
-
-// We continue with gradual improvements. The function that solves the linear
-// system again uses the SSOR preconditioner, and is again unchanged except
-// that we have to incorporate hanging node constraints. As mentioned above,
-// the degrees of freedom from the AffineConstraints object corresponding to
-// hanging node constraints and boundary values have been removed from the
-// linear system by giving the rows and columns of the matrix a special
-// treatment. This way, the values for these degrees of freedom have wrong,
-// but well-defined values after solving the linear system. What we then have
-// to do is to use the constraints to assign to them the values that they
-// should have. This process, called <code>distributing</code> constraints,
-// computes the values of constrained nodes from the values of the
-// unconstrained ones, and requires only a single additional function call
-// that you find at the end of this function:
 
 template <int dim>
 void Step6<dim>::solve()
@@ -366,91 +378,56 @@ void Step6<dim>::solve()
 }
 
 
-// @sect4{Step6::refine_grid}
 
-// We use a sophisticated error estimation scheme to refine the mesh instead
-// of global refinement. We will use the KellyErrorEstimator class which
-// implements an error estimator for the Laplace equation; it can in principle
-// handle variable coefficients, but we will not use these advanced features,
-// but rather use its most simple form since we are not interested in
-// quantitative results but only in a quick way to generate locally refined
-// grids.
-//
-// Although the error estimator derived by Kelly et al. was originally
-// developed for the Laplace equation, we have found that it is also well
-// suited to quickly generate locally refined grids for a wide class of
-// problems. This error estimator uses the solution gradient's jump at
-// cell faces (which is a measure for the second derivatives) and
-// scales it by the size of the cell. It is therefore a measure for the local
-// smoothness of the solution at the place of each cell and it is thus
-// understandable that it yields reasonable grids also for hyperbolic
-// transport problems or the wave equation as well, although these grids are
-// certainly suboptimal compared to approaches specially tailored to the
-// problem. This error estimator may therefore be understood as a quick way to
-// test an adaptive program.
-//
-// The way the estimator works is to take a <code>DoFHandler</code> object
-// describing the degrees of freedom and a vector of values for each degree of
-// freedom as input and compute a single indicator value for each active cell
-// of the triangulation (i.e. one value for each of the active cells). To do
-// so, it needs two additional pieces of information: a face quadrature formula,
-// i.e., a quadrature formula on <code>dim-1</code> dimensional objects. We use
-// a 3-point Gauss rule again, a choice that is consistent and appropriate with
-// the bi-quadratic finite element shape functions in this program.
-// (What constitutes a suitable quadrature rule here of course depends on
-// knowledge of the way the error estimator evaluates the solution field. As
-// said above, the jump of the gradient is integrated over each face, which
-// would be a quadratic function on each face for the quadratic elements in
-// use in this example. In fact, however, it is the square of the jump of the
-// gradient, as explained in the documentation of that class, and that is a
-// quartic function, for which a 3 point Gauss formula is sufficient since it
-// integrates polynomials up to order 5 exactly.)
-//
-// Secondly, the function wants a list of boundary indicators for those
-// boundaries where we have imposed Neumann values of the kind
-// $\partial_n u(\mathbf x) = h(\mathbf x)$, along with a function $h(\mathbf
-// x)$ for each such boundary. This information is represented by a map from
-// boundary indicators to function objects describing the Neumann boundary
-// values. In the present example program, we do not use Neumann boundary
-// values, so this map is empty, and in fact constructed using the default
-// constructor of the map in the place where the function call expects the
-// respective function argument.
-//
-// The output is a vector of values for all active cells. While it may
-// make sense to compute the <b>value</b> of a solution degree of freedom
-// very accurately, it is usually not necessary to compute the <b>error
-// indicator</b> corresponding to the solution on a cell particularly
-// accurately. We therefore typically use a vector of floats instead of a vector
-// of doubles to represent error indicators.
 template <int dim>
 void Step6<dim>::refine_grid()
 {
   Vector<float> estimated_error_per_cell(triangulation.n_active_cells());
     
 //Jump Estimator
+  /*
   KellyErrorEstimator<dim>::estimate(dof_handler,
                                      QGauss<dim - 1>(3),
                                      std::map<types::boundary_id,
                                      const Function<dim> *>(),
                                      solution,
                                      estimated_error_per_cell);
-    
+   */
+    KellyErrorEstimator<dim-1, dim>::estimate(mapping,
+                                       dof_handler,
+                                       QGauss<dim - 2>(3),
+                                       std::map<types::boundary_id,
+                                       const Function<dim> *>(),
+                                       solution,
+                                       estimated_error_per_cell);
     
 //Bulk Estimator
-    QGauss<dim>  quad(3); //Degree 3 gauss quadrature
+    //QGauss<dim>  quad(3); //Degree 3 gauss quadrature
+    
     
     //Create object containing FEM values
+    /*
     FEValues<dim> fe_values (fe,
                              quad,
                              update_values |
                              update_quadrature_points |
                              update_hessians |
                              update_JxW_values);
+     */
+    QGauss<dim-1>  quad(3); //Degree 3 gauss quadrature
+    FEValues<2, dim> fe_values (mapping,
+                                    fe,
+                                    quad,
+                                    update_values |
+                                    update_quadrature_points |
+                                    update_hessians |
+                                    update_JxW_values);
     
     const unsigned int   n_q_points = quad.size();
     
     std::vector<double > laplacians_at_q_points(n_q_points);
-    
+    std::vector<double > rhs_at_q_points(n_q_points);
+    const RightHandSide<dim> rhs;
     
     auto cell = dof_handler.begin_active();
     auto endc = dof_handler.end();
@@ -471,12 +448,13 @@ void Step6<dim>::refine_grid()
             //Evaluate FEM solution's Laplacian at quadrature points and write them to
             // laplacians_at_q_points vector
             fe_values.get_function_laplacians(solution, laplacians_at_q_points);
-            
+            rhs.value_list(fe_values.get_quadrature_points(), rhs_at_q_points);
             
             for (unsigned int q_point=0; q_point<n_q_points; ++q_point){
                 // h*|1+Delta u|
-                const double current_coefficient =coefficient<dim>(fe_values.quadrature_point(q_point));
-                dValue = cell->diameter()/fe.degree*(1.0 + current_coefficient*laplacians_at_q_points[q_point]);
+                const double current_coefficient = coefficient<dim>(fe_values.quadrature_point(q_point));
+                
+                dValue = cell->diameter()/fe.degree*(rhs_at_q_points[q_point] + current_coefficient*laplacians_at_q_points[q_point]);
                 
                 estimated_error_per_cell(present_cell) += dValue*dValue*fe_values.JxW(q_point);
                 
@@ -485,63 +463,15 @@ void Step6<dim>::refine_grid()
         }
     }
 
-  // The above function returned one error indicator value for each cell in
-  // the <code>estimated_error_per_cell</code> array. Refinement is now done
-  // as follows: refine those 30 per cent of the cells with the highest error
-  // values, and coarsen the 3 per cent of cells with the lowest values.
-  //
-  // One can easily verify that if the second number were zero, this would
-  // approximately result in a doubling of cells in each step in two space
-  // dimensions, since for each of the 30 per cent of cells, four new would be
-  // replaced, while the remaining 70 per cent of cells remain untouched. In
-  // practice, some more cells are usually produced since it is disallowed
-  // that a cell is refined twice while the neighbor cell is not refined; in
-  // that case, the neighbor cell would be refined as well.
-  //
-  // In many applications, the number of cells to be coarsened would be set to
-  // something larger than only three per cent. A non-zero value is useful
-  // especially if for some reason the initial (coarse) grid is already rather
-  // refined. In that case, it might be necessary to refine it in some
-  // regions, while coarsening in some other regions is useful. In our case
-  // here, the initial grid is very coarse, so coarsening is only necessary in
-  // a few regions where over-refinement may have taken place. Thus a small,
-  // non-zero value is appropriate here.
-  //
-  // The following function now takes these refinement indicators and flags
-  // some cells of the triangulation for refinement or coarsening using the
-  // method described above. It is from a class that implements several
-  // different algorithms to refine a triangulation based on cell-wise error
-  // indicators.
   GridRefinement::refine_and_coarsen_fixed_number(triangulation,
                                                   estimated_error_per_cell,
                                                   0.3,
                                                   0.03);
 
-  // After the previous function has exited, some cells are flagged for
-  // refinement, and some other for coarsening. The refinement or coarsening
-  // itself is not performed by now, however, since there are cases where
-  // further modifications of these flags is useful. Here, we don't want to do
-  // any such thing, so we can tell the triangulation to perform the actions
-  // for which the cells are flagged:
   triangulation.execute_coarsening_and_refinement();
 }
 
-
-// @sect4{Step6::output_results}
-
-// At the end of computations on each grid, and just before we continue the
-// next cycle with mesh refinement, we want to output the results from this
-// cycle.
-//
-// We have already seen in step-1 how this can be achieved for the
-// mesh itself. The only thing we have to change is the generation of
-// the file name, since it should contain the number of the present
-// refinement cycle provided to this function as an argument. To this
-// end, we simply append the number of the refinement cycle as a
-// string to the file name.
-//
-// We also output the solution in the same way as we did before, with
-// a similarly constructed file name.
+/*
 template <int dim>
 void Step6<dim>::output_results(const unsigned int cycle) const
 {
@@ -561,51 +491,63 @@ void Step6<dim>::output_results(const unsigned int cycle) const
     data_out.write_vtk(output);
   }
 }
+*/
 
+template <int dim>
+void Step6<dim>::output_results() const
+{
+    DataOut<dim-1, DoFHandler<dim-1, dim>> data_out;
+    data_out.attach_dof_handler(dof_handler);
+    data_out.add_data_vector(
+                             solution,
+                             "solution",
+                             DataOut<dim-1, DoFHandler<dim-1, dim>>::type_dof_data);
+    data_out.build_patches(mapping, mapping.get_degree());
+    std::string filename("solution-");
+    filename += static_cast<char>('0' + dim);
+    filename += "d.vtk";
+    std::ofstream output(filename);
+    data_out.write_vtk(output);
+}
 
-// @sect4{Step6::run}
-
-// The final function before <code>main()</code> is again the main driver of
-// the class, <code>run()</code>. It is similar to the one of step-5, except
-// that we generate a file in the program again instead of reading it from
-// disk, in that we adaptively instead of globally refine the mesh, and that
-// we output the solution on the final mesh in the present function.
-//
-// The first block in the main loop of the function deals with mesh
-// generation. If this is the first cycle of the program, instead of reading
-// the grid from a file on disk as in the previous example, we now again
-// create it using a library function. The domain is again a circle, which is
-// why we have to provide a suitable boundary object as well. We place the
-// center of the circle at the origin and have the radius be one (these are
-// the two hidden arguments to the function, which have default values).
-//
-// You will notice by looking at the coarse grid that it is of inferior
-// quality than the one which we read from the file in the previous example:
-// the cells are less equally formed. However, using the library function this
-// program works in any space dimension, which was not the case before.
-//
-// In case we find that this is not the first cycle, we want to refine the
-// grid. Unlike the global refinement employed in the last example program, we
-// now use the adaptive procedure described above.
-//
-// The rest of the loop looks as before:
 template <int dim>
 void Step6<dim>::run()
 {
-  for (unsigned int cycle = 0; cycle < 8; ++cycle)
+  for (unsigned int cycle = 0; cycle < 5; ++cycle)
     {
       std::cout << "Cycle " << cycle << ':' << std::endl;
 
       if (cycle == 0)
         {
-            Point<dim, double> a(0.0,0.0);
-            Point<dim, double> b(1.0,0.5);
-            Point<dim, double> c(0.5,1.0);
-            std::vector<Point<dim, double>> vertices = {a, b, c};
+            //Point<dim, double> a(0.0,0.0);
+            //Point<dim, double> b(1.0,0.5);
+            //Point<dim, double> c(0.5,1.0);
+            //std::vector<Point<dim, double>> vertices = {a, b, c};
             //GridGenerator::simplex(triangulation, vertices);
             //GridGenerator::truncated_cone(triangulation);
-            GridGenerator::hyper_L(triangulation);
-          triangulation.refine_global(2);
+            //GridGenerator::hyper_L(triangulation);
+            //triangulation.refine_global(2);
+            /*
+            {
+                Triangulation<dim> volume_mesh;
+                GridGenerator::half_hyper_ball(volume_mesh);
+                std::set<types::boundary_id> boundary_ids;
+                boundary_ids.insert(0);
+                GridGenerator::extract_boundary_mesh(volume_mesh,
+                                                     triangulation,
+                                                     boundary_ids);
+            }
+            triangulation.set_all_manifold_ids(0);
+            triangulation.set_manifold(0, SphericalManifold<dim-1, dim>());
+            triangulation.refine_global(4);
+            */
+            GridGenerator::torus(triangulation,
+                                 0.7,
+                                 0.5);
+            triangulation.refine_global(3);
+            
+            std::cout << "Surface mesh has " << triangulation.n_active_cells()
+            << " cells." << std::endl;
         }
       else
         refine_grid();
@@ -621,59 +563,23 @@ void Step6<dim>::run()
 
       assemble_system();
       solve();
-      output_results(cycle);
+      //output_results(cycle);
+      
     }
+    output_results();
 }
 
 
-// @sect3{The <code>main</code> function}
-
-// The main function is unaltered in its functionality from the previous
-// example, but we have taken a step of additional caution. Sometimes,
-// something goes wrong (such as insufficient disk space upon writing an
-// output file, not enough memory when trying to allocate a vector or a
-// matrix, or if we can't read from or write to a file for whatever reason),
-// and in these cases the library will throw exceptions. Since these are
-// run-time problems, not programming errors that can be fixed once and for
-// all, this kind of exceptions is not switched off in optimized mode, in
-// contrast to the <code>Assert</code> macro which we have used to test
-// against programming errors. If uncaught, these exceptions propagate the
-// call tree up to the <code>main</code> function, and if they are not caught
-// there either, the program is aborted. In many cases, like if there is not
-// enough memory or disk space, we can't do anything but we can at least print
-// some text trying to explain the reason why the program failed. A way to do
-// so is shown in the following. It is certainly useful to write any larger
-// program in this way, and you can do so by more or less copying this
-// function except for the <code>try</code> block that actually encodes the
-// functionality particular to the present application.
 int main()
 {
   // The general idea behind the layout of this function is as follows: let's
   // try to run the program as we did before...
   try
     {
-      Step6<2> laplace_problem_2d;
+      Step6<3> laplace_problem_2d;
       laplace_problem_2d.run();
     }
-  // ...and if this should fail, try to gather as much information as
-  // possible. Specifically, if the exception that was thrown is an object of
-  // a class that is derived from the C++ standard class
-  // <code>exception</code>, then we can use the <code>what</code> member
-  // function to get a string which describes the reason why the exception was
-  // thrown.
-  //
-  // The deal.II exception classes are all derived from the standard class,
-  // and in particular, the <code>exc.what()</code> function will return
-  // approximately the same string as would be generated if the exception was
-  // thrown using the <code>Assert</code> macro. You have seen the output of
-  // such an exception in the previous example, and you then know that it
-  // contains the file and line number of where the exception occurred, and
-  // some other information. This is also what the following statements would
-  // print.
-  //
-  // Apart from this, there isn't much that we can do except exiting the
-  // program with an error code (this is what the <code>return 1;</code>
-  // does):
+
   catch (std::exception &exc)
     {
       std::cerr << std::endl
