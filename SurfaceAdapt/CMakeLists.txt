@@ -1,9 +1,12 @@
 ##
-#  CMake script for the step-6 tutorial program:
+#  Modified CMake script for the step-6 tutorial program:
 ##
+
 
 # Set the name of the project and target:
 SET(TARGET "main")
+
+
 
 # Declare all source files the target consists of. Here, this is only
 # the one step-X.cc file, but as you expand your project you may wish
@@ -15,9 +18,20 @@ SET(TARGET "main")
 # or switch altogether to the large project CMakeLists.txt file discussed
 # in the "CMake in user projects" page accessible from the "User info"
 # page of the documentation.
-SET(TARGET_SRC
-  ${TARGET}.cpp
-  )
+
+FILE(GLOB_RECURSE TARGET_SRC  "source/*.cc")
+FILE(GLOB_RECURSE TARGET_INC  "include/*.h")
+INCLUDE_DIRECTORIES("include")
+SET(TARGET_SRC ${TARGET_SRC}  ${TARGET_INC}) 
+
+
+#SET(TARGET_SRC
+#  ${TARGET}.cc
+#  slepc_solver_MOD.cc
+#  my_utilities.cc
+#  mpi_mgr_slepc.cc
+#  )
+
 
 # Usually, you will not need to modify anything beyond this point...
 
